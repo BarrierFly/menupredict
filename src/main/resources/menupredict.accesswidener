@@ -1,0 +1,5 @@
+accessWidener v2 named
+# The client menu is created with a placeholder container id while the predicted
+# open awaits the server's ClientboundOpenScreenPacket; the real id is written back
+# onto the same menu instance once it arrives.
+mutable field net/minecraft/world/inventory/AbstractContainerMenu containerId I

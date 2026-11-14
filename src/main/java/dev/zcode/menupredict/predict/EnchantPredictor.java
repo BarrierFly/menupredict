@@ -22,8 +22,11 @@ import net.minecraft.world.item.enchantment.EnchantmentHelper;
 import net.minecraft.world.item.enchantment.EnchantmentInstance;
 import net.minecraft.world.level.block.EnchantingTableBlock;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
+import java.util.WeakHashMap;
 
 /**
  * Predicts the enchanting table options and result. The enchantment seed is a synced DataSlot
@@ -34,7 +37,20 @@ import java.util.Optional;
  * {@code access.execute} block will; the server's SetSlot/DataSlot/experience replies reconcile.
  */
 public final class EnchantPredictor {
+	/**
+	 * Menus whose enchantment seed has been received via a SetData packet. The seed only exists
+	 * server-side, so a predicted-open menu must not compute options from the placeholder seed 0;
+	 * normal opens always receive the seed before any user interaction can change a slot.
+	 */
+	private static final Set<EnchantmentMenu> SEED_SYNCED = Collections.newSetFromMap(new WeakHashMap<>());
+
 	private EnchantPredictor() {
+	}
+
+	public static void markSeedSynced(EnchantmentMenu menu) {
+		SEED_SYNCED.add(menu);
+		// The item may already sit in the slot (predicted open under latency): predict now.
+		onSlotsChanged(menu);
 	}
 
 	public static void onSlotsChanged(EnchantmentMenu menu) {
@@ -42,6 +58,10 @@ public final class EnchantPredictor {
 		LocalPlayer player = minecraft.player;
 		ClientLevel level = minecraft.level;
 		if (player == null || level == null || menu != player.containerMenu) {
+			return;
+		}
+
+		if (!SEED_SYNCED.contains(menu)) {
 			return;
 		}
 

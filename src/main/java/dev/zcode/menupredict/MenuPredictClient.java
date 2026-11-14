@@ -60,6 +60,11 @@ public class MenuPredictClient implements ClientModInitializer {
 		}
 	}
 
+	/** Binds a table position directly at predicted-open time, before any server packet arrives. */
+	public static void bindEnchantTablePos(EnchantmentMenu menu, BlockPos pos) {
+		ENCHANT_TABLE_POS.put(menu, pos);
+	}
+
 	public static BlockPos getEnchantTablePos(EnchantmentMenu menu) {
 		return ENCHANT_TABLE_POS.get(menu);
 	}

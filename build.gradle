@@ -9,6 +9,10 @@ base {
 	archivesName = project.mod_id
 }
 
+loom {
+	accessWidenerPath = file("src/main/resources/menupredict.accesswidener")
+}
+
 dependencies {
 	minecraft "com.mojang:minecraft:${project.minecraft_version}"
 	mappings loom.officialMojangMappings()

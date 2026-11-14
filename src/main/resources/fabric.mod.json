@@ -1,9 +1,9 @@
 {
 	"schemaVersion": 1,
 	"id": "menupredict",
-	"version": "1.0.0",
+	"version": "1.1.0",
 	"name": "MenuPredict",
-	"description": "Client-side prediction for functional-block menus (crafting result, recipe book placement, enchanting options and result) so the next action can start without waiting for the server round trip. Verified against server replies like vanilla does.",
+	"description": "Client-side prediction for functional-block menus: the screen opens instantly on right-click, the crafting result, recipe book placement and the enchanting options/result are computed locally without waiting for the server round trip. Verified against server replies like vanilla does.",
 	"authors": [
 		"ZCode"
 	],
@@ -16,6 +16,7 @@
 	"mixins": [
 		"menupredict.mixins.json"
 	],
+	"accessWidener": "menupredict.accesswidener",
 	"depends": {
 		"fabricloader": ">=0.17.0",
 		"minecraft": "1.21.11",

@@ -2,6 +2,8 @@ package dev.zcode.menupredict.mixin;
 
 import dev.zcode.menupredict.MenuPredictClient;
 import dev.zcode.menupredict.predict.PlaceRecipePredictor;
+import dev.zcode.menupredict.predict.PredictedOpen;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.MultiPlayerGameMode;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.core.BlockPos;
@@ -27,16 +29,24 @@ public class MultiPlayerGameModeMixin {
 	}
 
 	/**
-	 * Tracks the last right-clicked block so an enchanting menu (which is created client-side
-	 * with a NULL level access) can still resolve its table position for local bookshelf counting.
+	 * After the interaction resolves: records the last right-clicked block position (an
+	 * enchanting menu is created client-side with a NULL level access, so the table position is
+	 * otherwise unknown), and — when the used block is a crafting/enchanting table — opens the
+	 * menu locally instead of waiting for the server's ClientboundOpenScreenPacket.
 	 */
-	@Inject(method = "useItemOn", at = @At("HEAD"))
+	@Inject(method = "useItemOn", at = @At("TAIL"))
 	private void menupredict$onUseItemOn(
 		LocalPlayer player, InteractionHand hand, BlockHitResult blockHitResult, CallbackInfoReturnable<InteractionResult> cir
 	) {
 		BlockPos pos = blockHitResult.getBlockPos();
-		if (pos != null) {
-			MenuPredictClient.onBlockUse(pos);
+		if (pos == null) {
+			return;
+		}
+
+		MenuPredictClient.onBlockUse(pos);
+		Minecraft minecraft = Minecraft.getInstance();
+		if (minecraft.level != null) {
+			PredictedOpen.onBlockUseResult(minecraft, minecraft.level, minecraft.level.getBlockState(pos), pos, cir.getReturnValue());
 		}
 	}
 }
