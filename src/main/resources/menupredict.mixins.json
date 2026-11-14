@@ -1,0 +1,19 @@
+{
+	"required": true,
+	"package": "dev.zcode.menupredict.mixin",
+	"compatibilityLevel": "JAVA_21",
+	"minVersion": "0.8",
+	"client": [
+		"AbstractCraftingMenuAccessor",
+		"ClientPacketListenerMixin",
+		"ClientRecipeBookAccessor",
+		"CraftingMenuMixin",
+		"EnchantmentMenuAccessor",
+		"EnchantmentMenuMixin",
+		"InventoryMenuMixin",
+		"MultiPlayerGameModeMixin"
+	],
+	"injectors": {
+		"defaultRequire": 1
+	}
+}

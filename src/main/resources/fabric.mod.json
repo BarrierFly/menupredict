@@ -1,0 +1,24 @@
+{
+	"schemaVersion": 1,
+	"id": "menupredict",
+	"version": "1.0.0",
+	"name": "MenuPredict",
+	"description": "Client-side prediction for functional-block menus (crafting result, recipe book placement, enchanting options and result) so the next action can start without waiting for the server round trip. Verified against server replies like vanilla does.",
+	"authors": [
+		"ZCode"
+	],
+	"environment": "client",
+	"entrypoints": {
+		"client": [
+			"dev.zcode.menupredict.MenuPredictClient"
+		]
+	},
+	"mixins": [
+		"menupredict.mixins.json"
+	],
+	"depends": {
+		"fabricloader": ">=0.17.0",
+		"minecraft": "1.21.11",
+		"java": ">=21"
+	}
+}
