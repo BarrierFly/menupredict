@@ -1,6 +1,7 @@
 package dev.zcode.menupredict.predict;
 
 import dev.zcode.menupredict.mixin.AbstractCraftingMenuAccessor;
+import dev.zcode.menupredict.reconcile.PredictionReconciler;
 import it.unimi.dsi.fastutil.ints.IntArrayList;
 import it.unimi.dsi.fastutil.ints.IntList;
 import net.minecraft.client.Minecraft;
@@ -24,7 +25,9 @@ import net.minecraft.world.item.crafting.display.ShapedCraftingRecipeDisplay;
 import net.minecraft.world.item.crafting.display.ShapelessCraftingRecipeDisplay;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -35,6 +38,8 @@ import java.util.Optional;
  * server reruns the same deterministic algorithm and reconciles through SetSlot/SetContent.
  */
 public final class PlaceRecipePredictor {
+	public static final String ACTION = "menupredict.action.place_recipe";
+
 	private static boolean placing;
 
 	private PlaceRecipePredictor() {
@@ -140,6 +145,9 @@ public final class PlaceRecipePredictor {
 		}
 
 		final int fillAmount = amount;
+		Map<Integer, ItemStack> before = gridSnapshot(menu);
+		// This new action supersedes any prediction still waiting for a reply on this menu.
+		PredictionReconciler.discard(menu);
 		placing = true;
 		try {
 			if (!clearGrid(menu, inventory)) {
@@ -171,7 +179,37 @@ public final class PlaceRecipePredictor {
 			placing = false;
 		}
 
-		CraftingResultPredictor.predictResult(menu, minecraft);
+		Optional<ItemStack> result = CraftingResultPredictor.predict(menu, minecraft);
+		recordFillPrediction(menu, before, result);
+	}
+
+	/** Grid + result slot contents before the fill, used to find the slots the fill rewrote. */
+	private static Map<Integer, ItemStack> gridSnapshot(AbstractCraftingMenu menu) {
+		Map<Integer, ItemStack> snapshot = new HashMap<>();
+
+		for (Slot slot : menu.getInputGridSlots()) {
+			snapshot.put(slot.index, slot.getItem().copy());
+		}
+
+		snapshot.put(menu.getResultSlot().index, menu.getResultSlot().getItem().copy());
+		return snapshot;
+	}
+
+	/**
+	 * Registers the grid slots and result the fill rewrote for verification. The server re-runs
+	 * {@code ServerPlaceRecipe} for the same packet and reports its grid/result through slot
+	 * changes, so every stack written here has an authoritative counterpart to compare against.
+	 * An unresolvable result is left out: the server decides it, nothing was claimed locally.
+	 */
+	private static void recordFillPrediction(AbstractCraftingMenu menu, Map<Integer, ItemStack> before, Optional<ItemStack> result) {
+		Map<Integer, ItemStack> expected = new HashMap<>();
+
+		for (Slot slot : menu.getInputGridSlots()) {
+			expected.put(slot.index, slot.getItem().copy());
+		}
+
+		result.ifPresent(stack -> expected.put(menu.getResultSlot().index, stack.copy()));
+		PredictionReconciler.expectChangedSlots(ACTION, menu, before, expected);
 	}
 
 	private static CraftingInput currentGridInput(AbstractCraftingMenu menu) {

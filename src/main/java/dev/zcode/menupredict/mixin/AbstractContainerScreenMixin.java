@@ -15,4 +15,14 @@ public class AbstractContainerScreenMixin {
 	private void menupredict$onContainerTick(CallbackInfo ci) {
 		PredictedOpen.tickPending(Minecraft.getInstance());
 	}
+
+	/**
+	 * A predicted screen the player closes before the server answers: the server may still send
+	 * its open packet later, and a stale pending entry would then hijack (or roll back) whatever
+	 * screen the player has open by that time. Dropping it here keeps the state in sync.
+	 */
+	@Inject(method = "onClose", at = @At("HEAD"))
+	private void menupredict$onClose(CallbackInfo ci) {
+		PredictedOpen.onScreenClosed((AbstractContainerScreen<?>) (Object) this);
+	}
 }

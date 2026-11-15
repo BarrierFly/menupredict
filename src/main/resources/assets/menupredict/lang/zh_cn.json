@@ -1,0 +1,9 @@
+{
+	"menupredict.reconcile.match": "MenuPredict：%s 与服务端一致",
+	"menupredict.reconcile.mismatch": "MenuPredict：%s 与服务端不一致",
+	"menupredict.action.open_screen": "预测打开界面",
+	"menupredict.action.crafting_result": "预测合成产物",
+	"menupredict.action.place_recipe": "预测配方填充",
+	"menupredict.action.enchant_options": "预测附魔选项",
+	"menupredict.action.enchant_result": "预测附魔结果"
+}

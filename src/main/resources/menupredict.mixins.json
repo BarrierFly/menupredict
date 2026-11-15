@@ -11,8 +11,10 @@
 		"CraftingMenuMixin",
 		"EnchantmentMenuAccessor",
 		"EnchantmentMenuMixin",
+		"GuiMixin",
 		"InventoryMenuMixin",
-		"MultiPlayerGameModeMixin"
+		"MultiPlayerGameModeMixin",
+		"ScreenMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1

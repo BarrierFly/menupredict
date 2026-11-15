@@ -1,6 +1,8 @@
 package dev.zcode.menupredict.predict;
 
 import dev.zcode.menupredict.MenuPredictClient;
+import dev.zcode.menupredict.reconcile.PredictionReconciler;
+import dev.zcode.menupredict.reconcile.ReconcileToast;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
@@ -42,6 +44,7 @@ public final class PredictedOpen {
 	/** Server container ids are {@code counter % 100 + 1}, so -1 never collides with a real id. */
 	private static final int PREDICTED_CONTAINER_ID = -1;
 	private static final int CONFIRM_TIMEOUT_TICKS = 100;
+	public static final String ACTION = "menupredict.action.open_screen";
 
 	private static PendingOpen pending;
 
@@ -77,6 +80,24 @@ public final class PredictedOpen {
 		player.containerMenu = menu;
 		minecraft.setScreen(screen);
 		pending = new PendingOpen(menu, screen);
+		// Until the server confirms, this menu's clicks carry the placeholder id and are dropped.
+		PredictionReconciler.suppress(menu);
+	}
+
+	/**
+	 * Called when the player closes a screen. If it is the still-unconfirmed predicted one, the
+	 * pending state is dropped quietly: the player cancelled the prediction, so there is no
+	 * outcome to report, and a later open packet must not be matched against it.
+	 */
+	public static void onScreenClosed(AbstractContainerScreen<?> screen) {
+		PendingOpen current = pending;
+		if (current == null || current.screen != screen) {
+			return;
+		}
+
+		pending = null;
+		PredictionReconciler.suppress(null);
+		PredictionReconciler.discard(current.menu);
 	}
 
 	/**
@@ -95,10 +116,19 @@ public final class PredictedOpen {
 		boolean screenStillOurs = player != null && minecraft.screen == current.screen && player.containerMenu == current.menu;
 		if (screenStillOurs && current.menu.getType() == menuType) {
 			current.menu.containerId = containerId;
+			// Everything written on the placeholder-id menu was never executed by the server; the
+			// SetContent that follows the open packet is authoritative for it, so nothing local is
+			// left to compare (the open itself is verified here).
+			PredictionReconciler.suppress(null);
+			PredictionReconciler.discard(current.menu);
+			PredictionReconciler.report(ACTION, ReconcileToast.Outcome.MATCH);
 			return true;
 		}
 
 		if (screenStillOurs) {
+			PredictionReconciler.suppress(null);
+			PredictionReconciler.discard(current.menu);
+			PredictionReconciler.report(ACTION, ReconcileToast.Outcome.MISMATCH);
 			rollback(minecraft, current);
 		}
 
@@ -115,11 +145,19 @@ public final class PredictedOpen {
 		LocalPlayer player = minecraft.player;
 		if (player == null || minecraft.level == null || minecraft.screen != current.screen || player.containerMenu != current.menu) {
 			pending = null;
+			PredictionReconciler.suppress(null);
+			PredictionReconciler.discard(current.menu);
 			return;
 		}
 
 		if (++current.ticks >= CONFIRM_TIMEOUT_TICKS) {
+			// The server never answered: it refused the interaction (e.g. a protection plugin). The
+			// predicted menu never existed server-side, which is a real divergence from what was
+			// shown locally, so it is reported before rolling back.
 			pending = null;
+			PredictionReconciler.suppress(null);
+			PredictionReconciler.discard(current.menu);
+			PredictionReconciler.report(ACTION, ReconcileToast.Outcome.MISMATCH);
 			rollback(minecraft, current);
 		}
 	}

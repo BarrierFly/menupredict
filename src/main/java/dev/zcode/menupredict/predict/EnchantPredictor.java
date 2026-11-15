@@ -2,6 +2,7 @@ package dev.zcode.menupredict.predict;
 
 import dev.zcode.menupredict.MenuPredictClient;
 import dev.zcode.menupredict.mixin.EnchantmentMenuAccessor;
+import dev.zcode.menupredict.reconcile.PredictionReconciler;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.player.LocalPlayer;
@@ -23,7 +24,9 @@ import net.minecraft.world.item.enchantment.EnchantmentInstance;
 import net.minecraft.world.level.block.EnchantingTableBlock;
 
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.WeakHashMap;
@@ -37,6 +40,16 @@ import java.util.WeakHashMap;
  * {@code access.execute} block will; the server's SetSlot/DataSlot/experience replies reconcile.
  */
 public final class EnchantPredictor {
+	public static final String ACTION_OPTIONS = "menupredict.action.enchant_options";
+	public static final String ACTION_RESULT = "menupredict.action.enchant_result";
+
+	/** DataSlot ids in vanilla {@code EnchantmentMenu}: three costs, seed, three clues, three levels. */
+	private static final int COST_SLOTS = 3;
+	private static final int CLUE_SLOTS = 3;
+	private static final int LEVEL_CLUE_SLOTS = 3;
+	/** Id of the enchantment seed data slot; it is a server-side random number. */
+	public static final int SEED_DATA_ID = 3;
+
 	/**
 	 * Menus whose enchantment seed has been received via a SetData packet. The seed only exists
 	 * server-side, so a predicted-open menu must not compute options from the placeholder seed 0;
@@ -44,16 +57,36 @@ public final class EnchantPredictor {
 	 */
 	private static final Set<EnchantmentMenu> SEED_SYNCED = Collections.newSetFromMap(new WeakHashMap<>());
 
+	/** Set while the locally applied enchantment result rewrites the item slots. */
+	private static boolean applyingResult;
+
 	private EnchantPredictor() {
 	}
 
 	public static void markSeedSynced(EnchantmentMenu menu) {
 		SEED_SYNCED.add(menu);
-		// The item may already sit in the slot (predicted open under latency): predict now.
-		onSlotsChanged(menu);
+		// The item may already sit in the slot (predicted open under latency): predict now. That
+		// recomputation only mirrors data the server just sent, so it claims no prediction.
+		onSlotsChanged(menu, false);
 	}
 
+	/**
+	 * Recomputes the three option rows for the current item with the synced seed. When the change
+	 * came from a local user action (an item placed by the player) the written values are also
+	 * registered for verification against the server's DataSlot broadcast; recomputations that
+	 * merely follow a server packet are not, see {@link PredictionReconciler}.
+	 */
 	public static void onSlotsChanged(EnchantmentMenu menu) {
+		if (applyingResult) {
+			// The enchantment changes the item and immediately reseeds the table; computing options
+			// from the old seed would only flash wrong costs until the new seed DataSlot arrives.
+			return;
+		}
+
+		onSlotsChanged(menu, !PredictionReconciler.isApplyingServerUpdate());
+	}
+
+	private static void onSlotsChanged(EnchantmentMenu menu, boolean record) {
 		Minecraft minecraft = Minecraft.getInstance();
 		LocalPlayer player = minecraft.player;
 		ClientLevel level = minecraft.level;
@@ -83,6 +116,7 @@ public final class EnchantPredictor {
 		int bookshelfCount = countBookshelves(level, tablePos);
 		int seed = menu.getEnchantmentSeed();
 		RandomSource random = RandomSource.create();
+		Map<Integer, Integer> before = record ? optionDataSlots(menu) : null;
 
 		random.setSeed(seed);
 
@@ -104,6 +138,10 @@ public final class EnchantPredictor {
 					menu.levelClue[i] = instance.level();
 				}
 			}
+		}
+
+		if (record) {
+			PredictionReconciler.expectChangedData(ACTION_OPTIONS, menu, before, optionDataSlots(menu));
 		}
 	}
 
@@ -132,22 +170,56 @@ public final class EnchantPredictor {
 			return;
 		}
 
-		player.onEnchantmentPerformed(item, lapisAmount);
-		if (item.is(Items.BOOK)) {
-			item = item.transmuteCopy(Items.ENCHANTED_BOOK);
-			enchantSlots.setItem(0, item);
+		// The click reseeds the table: the server pushes fresh costs/clues with a seed the client
+		// cannot know, so pending option checks are dropped instead of being compared. The item and
+		// lapis outcome is known exactly and becomes the verifiable part of this action.
+		PredictionReconciler.discardData(menu);
+		Map<Integer, ItemStack> before = Map.of(0, item.copy(), 1, lapis.copy());
+
+		applyingResult = true;
+		try {
+			player.onEnchantmentPerformed(item, lapisAmount);
+			if (item.is(Items.BOOK)) {
+				item = item.transmuteCopy(Items.ENCHANTED_BOOK);
+				enchantSlots.setItem(0, item);
+			}
+
+			for (EnchantmentInstance instance : list) {
+				item.enchant(instance.enchantment(), instance.level());
+			}
+
+			lapis.consume(lapisAmount, player);
+			if (lapis.isEmpty()) {
+				enchantSlots.setItem(1, ItemStack.EMPTY);
+			}
+
+			enchantSlots.setChanged();
+		} finally {
+			applyingResult = false;
 		}
 
-		for (EnchantmentInstance instance : list) {
-			item.enchant(instance.enchantment(), instance.level());
+		PredictionReconciler.expectChangedSlots(
+			ACTION_RESULT, menu, before, Map.of(0, enchantSlots.getItem(0).copy(), 1, enchantSlots.getItem(1).copy())
+		);
+	}
+
+	/** The option-row data slots (costs + clues) as currently written in the menu. */
+	private static Map<Integer, Integer> optionDataSlots(EnchantmentMenu menu) {
+		Map<Integer, Integer> values = new HashMap<>();
+
+		for (int i = 0; i < COST_SLOTS; i++) {
+			values.put(i, menu.costs[i]);
 		}
 
-		lapis.consume(lapisAmount, player);
-		if (lapis.isEmpty()) {
-			enchantSlots.setItem(1, ItemStack.EMPTY);
+		for (int i = 0; i < CLUE_SLOTS; i++) {
+			values.put(SEED_DATA_ID + 1 + i, menu.enchantClue[i]);
 		}
 
-		enchantSlots.setChanged();
+		for (int i = 0; i < LEVEL_CLUE_SLOTS; i++) {
+			values.put(SEED_DATA_ID + 1 + CLUE_SLOTS + i, menu.levelClue[i]);
+		}
+
+		return values;
 	}
 
 	private static List<EnchantmentInstance> enchantList(

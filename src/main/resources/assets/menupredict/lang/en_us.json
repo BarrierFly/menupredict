@@ -1,0 +1,9 @@
+{
+	"menupredict.reconcile.match": "MenuPredict: %s matched",
+	"menupredict.reconcile.mismatch": "MenuPredict: %s differed from the server",
+	"menupredict.action.open_screen": "predicted menu open",
+	"menupredict.action.crafting_result": "predicted crafting result",
+	"menupredict.action.place_recipe": "predicted recipe fill",
+	"menupredict.action.enchant_options": "predicted enchanting options",
+	"menupredict.action.enchant_result": "predicted enchantment result"
+}

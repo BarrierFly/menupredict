@@ -22,17 +22,31 @@
 - 服务端拒绝（距离校验、配方未解锁、并发改动等）时不产生槽位改动；客户端下一次点击的 `changedSlots` 哈希与服务端实际状态冲突，触发服务端 `broadcastFullState` 全量回滚——与原版对普通点击预测的兜底机制完全一致。
 - **预测打开**：确认前用户的所有菜单交互都带占位 id -1 发出，服务端因 containerId 不匹配整包忽略，不会产生任何服务端状态；服务端接受则无缝重绑，拒绝则超时回滚。
 
+### 一致性提示
+
+每次预测都会把「本地写入了什么」登记下来，服务端对应的 SetSlot / SetContent / SetData 回包到达后按槽位比对，并在界面顶部闪过一条约 0.9 秒的提示：
+
+| 提示 | 触发条件 |
+|---|---|
+| 绿色「xxx 与服务端一致」 | 服务端回包的值与本地预测完全相同（配方填充会比对整个网格 + 产物槽；附魔选项比对变化的费用/线索 DataSlot；附魔结果比对物品与青金石槽） |
+| 红色「xxx 与服务端不一致」 | 回包值与预测矛盾；或服务端明确拒绝（`ClientboundPlaceGhostRecipePacket` 表示填格被拒；预测打开在 100 tick 内等不到 OpenScreen 回包、或回包类型不匹配时立即报不一致并回滚） |
+| 无提示 | 服务端对该槽位/该数据没有回包（值本就相同无需同步、客户端未知配方的回退），或玩家在回包到达前又做了新操作使旧预测作废 |
+
+为避免误报，比对不是「一条回包立刻定性」：同一动作的回包要等 6 tick 稳定后才判定（一次动作的结果可能分成多个包发送）；玩家再次点击并改动了仍待确认的槽位时，旧预测被静默作废而不是判为不一致；只有 40 tick 内的预测才会给出「不一致」。服务端根本没有回包（值未变化无需同步）时会静默超时，不会报红。预测打开走单独路径：确认时直接报一致，无回包时在 5 秒超时处报不一致。
+
 ## 构成
 
 - Mixin（全部注册在客户端段，仅客户端加载）：
   - `CraftingMenuMixin` / `InventoryMenuMixin` — `slotsChanged` 注入产物预测（以 `containerMenu`/`inventoryMenu` 身份校验过滤同进程的整合服务端菜单）
-  - `MultiPlayerGameModeMixin` — `handlePlaceRecipe` 注入填格预测；`useItemOn` 尾部记录方块位置并触发预测打开
+  - `MultiPlayerGameModeMixin` — `handlePlaceRecipe` 注入填格预测；`useItemOn` 尾部记录方块位置并触发预测打开；`handleInventoryMouseClick` 前后快照菜单，作废被新点击取代的待确认预测
   - `EnchantmentMenuMixin` — `slotsChanged` 复算选项；`clickMenuButton` 尾部应用附魔
-  - `ClientPacketListenerMixin` — OpenScreen 到达前重绑预测菜单（跳过原版建屏）、打开后绑定预测状态、SetData 标记附魔种子已同步
-  - `AbstractContainerScreenMixin` — 驱动预测打开的确认/回滚计时
+  - `ClientPacketListenerMixin` — OpenScreen 到达前重绑预测菜单（跳过原版建屏）、打开后绑定预测状态、SetData 标记附魔种子已同步；SetSlot/SetContent/SetData/PlaceGhostRecipe 回包送入对账
+  - `AbstractContainerScreenMixin` — 驱动预测打开的确认/回滚计时；玩家提前关屏时清理待确认状态
+  - `GuiMixin` / `ScreenMixin` — 推进对账超时，并在 HUD / 容器界面顶部绘制一致性提示
   - `AbstractCraftingMenuAccessor` / `EnchantmentMenuAccessor` / `ClientRecipeBookAccessor`
 - Access Widener：`AbstractContainerMenu.containerId` 去 final（预测菜单重绑服务端 id 用）
 - 预测实现：`RecipeMatcher`（网格↔配方匹配、产物解析）、`CraftingResultPredictor`、`PlaceRecipePredictor`、`EnchantPredictor`、`PredictedOpen`（预测打开）
+- 对账实现：`PredictionReconciler`（登记预测、收集回包、定性并防误报）、`ReconcileToast`（淡出提示绘制）；文案在 `assets/menupredict/lang`（`en_us` / `zh_cn`）
 
 ## 构建
 
@@ -40,7 +54,7 @@
 ./gradlew build
 ```
 
-产物：`build/libs/menupredict-1.1.0.jar`。依赖仅 Fabric Loader（不依赖 Fabric API）；Gradle 9.5.1 + Loom 1.13.3 + 官方 mojang 映射，Java 21。
+产物：`build/libs/menupredict-1.2.0.jar`。依赖仅 Fabric Loader（不依赖 Fabric API）；Gradle 9.5.1 + Loom 1.13.3 + 官方 mojang 映射，Java 21。
 
 ## 已知边界（如实说明）
 
@@ -52,6 +66,7 @@
 - **附魔种子时差**：附魔后服务端立即换新种子，新种子经 DataSlot 约 1 RTT 后同步；在此间隔内放入物品的本地复算会沿用旧种子，服务端 DataSlot 到达后覆盖纠正。
 - **服务端权威校验失败**（距离、快照差异等）时同样依赖下一次交互的全量回滚，与原版点击预测一致。
 - 本 mod 通过了编译级验证（`gradlew build` 成功、mixin 目标与 access widener 均已 remap 到 intermediary），**尚未在真实游戏内做过运行期测试**，首次使用请在测试存档中先行验证。
+- **一致性提示的判定边界**：提示只能反映「服务端实际发回了什么」。服务端若只是静默忽略某个槽位同步（值没变、或包被插件拦掉），对应槽位不会得到单独确认，判定以「服务端发出的部分是否全部吻合」为准；预测打开被服务端拒绝（无回包）时按 5 秒超时给出红色提示并回滚，不会长时间沉默。
 
 ## 分析依据
 
@@ -59,5 +74,6 @@
 
 ## 版本
 
+- **1.2.0** — 新增：预测结果一致性提示（服务端回包与本地预测一致/不一致时在界面顶部短暂提示，含防误报的定性策略与中英文案）。
 - **1.1.0** — 新增：预测打开工作台/附魔台界面（右键当帧开屏、重绑服务端容器 id、拒绝超时回滚）；附魔选项预测加种子同步门控。
 - **1.0.0** — 首版：合成产物槽、配方书填格、附魔选项与结果预测。
