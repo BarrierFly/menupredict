@@ -76,7 +76,7 @@ public final class CraftingResultPredictor {
 		CraftingInput input = accessor.menupredict$craftSlots().asCraftInput();
 		Optional<ItemStack> resolved = Optional.empty();
 		if (!input.isEmpty()) {
-			resolved = RecipeMatcher.match(input, RecipeMatcher.knownEntries())
+			resolved = RecipeMatcher.match(input, RecipeMatcher.knownEntries(), minecraft.level)
 				.flatMap(match -> RecipeMatcher.resolveSingleResult(match.entry(), minecraft.level));
 		}
 

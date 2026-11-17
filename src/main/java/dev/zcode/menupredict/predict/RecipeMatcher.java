@@ -54,18 +54,39 @@ final class RecipeMatcher {
 	}
 
 	/**
-	 * Finds the first known recipe entry matching the given trimmed crafting input, mirroring
-	 * {@code RecipeManager.getRecipeFor}'s first-match semantics as far as client data allows.
+	 * Finds the known recipe entry matching the given trimmed crafting input. When more than one
+	 * known entry matches (possible with datapack recipes that overlap on one grid), the server
+	 * picks the first one in its own registry order — an order the client cannot reproduce — so
+	 * the match is only returned when every candidate resolves to the same result; otherwise the
+	 * grid is left to the server, exactly like the multi-result ambiguity of {@code resolveForStacks}.
 	 */
-	static Optional<GridMatch> match(CraftingInput input, Map<RecipeDisplayId, RecipeDisplayEntry> entries) {
+	static Optional<GridMatch> match(CraftingInput input, Map<RecipeDisplayId, RecipeDisplayEntry> entries, ClientLevel level) {
+		GridMatch first = null;
 		for (RecipeDisplayEntry entry : entries.values()) {
 			GridMatch match = matchEntry(entry, input);
-			if (match != null) {
-				return Optional.of(match);
+			if (match == null) {
+				continue;
+			}
+
+			if (first != null && !resultsAgree(first, match, level)) {
+				return Optional.empty();
+			}
+
+			if (first == null) {
+				first = match;
 			}
 		}
 
-		return Optional.empty();
+		return Optional.ofNullable(first);
+	}
+
+	/** True when both matching entries resolve to the same single result stack. */
+	private static boolean resultsAgree(GridMatch left, GridMatch right, ClientLevel level) {
+		Optional<ItemStack> leftResult = resolveSingleResult(left.entry(), level);
+		Optional<ItemStack> rightResult = resolveSingleResult(right.entry(), level);
+		return leftResult.isPresent()
+			&& rightResult.isPresent()
+			&& ItemStack.matches(leftResult.get(), rightResult.get());
 	}
 
 	/** Matches one entry against the input; returns null when it does not match. */
@@ -95,7 +116,10 @@ final class RecipeMatcher {
 				|| matchesShaped(input, ingredients, mapping, shaped.width(), true);
 			return matches ? new GridMatch(mapping, shaped.width(), shaped.height(), entry) : null;
 		} else if (display instanceof ShapelessCraftingRecipeDisplay shapeless) {
-			if (ingredients.size() != shapeless.ingredients().size()) {
+			// ShapelessRecipe.matches requires the trimmed input's item count to equal the
+			// ingredient count exactly: extra items in the grid mean no match, even though the
+			// multiset of any subset would satisfy canCraft.
+			if (input.ingredientCount() != ingredients.size() || ingredients.size() != shapeless.ingredients().size()) {
 				return null;
 			}
 

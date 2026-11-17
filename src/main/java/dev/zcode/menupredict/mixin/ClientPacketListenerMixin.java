@@ -26,7 +26,8 @@ public class ClientPacketListenerMixin {
 	/**
 	 * Before vanilla creates the screen from the open-screen packet: when a predicted screen of
 	 * the same menu type is already open, it is rebound to the server-assigned container id and
-	 * kept (no flicker); the SetContent/SetData packets that follow land on it normally.
+	 * the authoritative title (kept, no flicker); the SetContent/SetData packets that follow land
+	 * on it normally.
 	 */
 	@Inject(
 		method = "handleOpenScreen",
@@ -37,7 +38,7 @@ public class ClientPacketListenerMixin {
 		cancellable = true
 	)
 	private void menupredict$onOpenScreenBeforeCreate(ClientboundOpenScreenPacket packet, CallbackInfo ci) {
-		if (PredictedOpen.onServerOpenScreen(Minecraft.getInstance(), packet.getType(), packet.getContainerId())) {
+		if (PredictedOpen.onServerOpenScreen(Minecraft.getInstance(), packet.getType(), packet.getContainerId(), packet.getTitle())) {
 			ci.cancel();
 		}
 	}

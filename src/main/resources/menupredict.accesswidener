@@ -3,3 +3,8 @@ accessWidener v2 named
 # open awaits the server's ClientboundOpenScreenPacket; the real id is written back
 # onto the same menu instance once it arrives.
 mutable field net/minecraft/world/inventory/AbstractContainerMenu containerId I
+# The predicted screen is opened with the vanilla default title; the open-screen packet's
+# authoritative title (a custom-named enchanting table sends a literal one) is written
+# onto the same screen instance when it is rebound.
+accessible field net/minecraft/client/gui/screens/Screen title Lnet/minecraft/network/chat/Component;
+mutable field net/minecraft/client/gui/screens/Screen title Lnet/minecraft/network/chat/Component;

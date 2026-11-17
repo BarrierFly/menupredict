@@ -97,6 +97,9 @@ public class MultiPlayerGameModeMixin {
 			return;
 		}
 
+		// While a predicted open is unconfirmed, every local click happens only client-side; keep
+		// the original values so a rollback (or an early close) can undo exactly what was touched.
+		PredictedOpen.recordClickUndo(menu, snapshot);
 		PredictionReconciler.onLocalClick(olderCheckIds, snapshot, menu);
 	}
 }

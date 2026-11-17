@@ -8,7 +8,7 @@
 
 | A 类动作 | 本 mod 的做法 | 生效时机 |
 |---|---|---|
-| **打开工作台 / 附魔台界面本身** | 右键方块交互被消费后，立即用客户端已知的菜单结构（本地构造 `CraftingMenu`/`EnchantmentMenu` + 原版标题）打开界面，不再等服务端 `ClientboundOpenScreenPacket`；交互包照发，服务端仍拥有"是否打开"的决定权。服务端回包到达时把已打开的菜单**重绑**到服务端分配的容器 id（占位 id -1 不会与服务端 1~100 的分配冲突），后续 SetContent/SetData 直接落在同一界面上，无闪烁；服务端拒绝（如保护插件）时 5 秒超时回滚，预测期间移入格子的物品退回背包 | 右键当帧 |
+| **打开工作台 / 附魔台界面本身** | 右键方块交互被消费后，立即用客户端已知的菜单结构（本地构造 `CraftingMenu`/`EnchantmentMenu` + 原版标题）打开界面，不再等服务端 `ClientboundOpenScreenPacket`；交互包照发，服务端仍拥有"是否打开"的决定权。服务端回包到达时把已打开的菜单**重绑**到服务端分配的容器 id 与标题（占位 id -1 不会与服务端 1~100 的分配冲突），后续 SetContent/SetData 直接落在同一界面上，无闪烁；服务端拒绝（如保护插件）时 5 秒超时回滚，预测期间玩家在本地的全部菜单改动（移入格子的物品、已拿走的预测产物等）按槽位撤销回原位 | 右键当帧 |
 | 工作台 / 背包 2x2 合成格的产物槽显示 | 网格每次变化时，用客户端同步的配方数据（`ClientRecipeBook` 中的 `RecipeDisplayEntry`：`RecipeDisplay` + 真实 `Ingredient` 列表）复刻服务端 `RecipeManager.getRecipeFor` 的匹配语义（trim 后尺寸/逐格 Ingredient 测试/镜像对称/无序多重匹配），解析产物后立即写入结果槽 | 网格变化当帧，不再等显式 SetSlot |
 | 配方书点配方填格（placeRecipe） | 在 `ServerboundPlaceRecipePacket` 发出前，客户端完整复刻服务端 `ServerPlaceRecipe`：`testClearGrid` → `canCraft` → 最大合成数与堆叠上限钳制 → 清格余料回背包 → `PlaceRecipeHelper` 居中填充；缺料时本地直接显示幽灵配方 | 点击当帧，不再等填充回包 |
 | 附魔台三个选项首次显示（费用 / 星星提示） | `useItemOn` 记录被点击的方块位置（预测打开则直接绑定）；物品放入网格后用同步的附魔种子（DataSlot）复算 `getEnchantmentCost` 与 clue。种子是纯服务端随机数，未收到首条种子 SetData 前不显示选项（避免用种子 0 算出错误数值） | 放入物品当帧，不再等 DataSlot 回包 |
@@ -20,7 +20,7 @@
 
 - 服务端正常执行同样的确定性逻辑后，其 `broadcastChanges`/显式 SetSlot/DataSlot/经验包按原样到达，把客户端状态覆盖为权威值（预测正确时内容一致，无感）。
 - 服务端拒绝（距离校验、配方未解锁、并发改动等）时不产生槽位改动；客户端下一次点击的 `changedSlots` 哈希与服务端实际状态冲突，触发服务端 `broadcastFullState` 全量回滚——与原版对普通点击预测的兜底机制完全一致。
-- **预测打开**：确认前用户的所有菜单交互都带占位 id -1 发出，服务端因 containerId 不匹配整包忽略，不会产生任何服务端状态；服务端接受则无缝重绑，拒绝则超时回滚。
+- **预测打开**：确认前用户的所有菜单交互都带占位 id -1 发出，服务端因 containerId 不匹配整包忽略，不会产生任何服务端状态；服务端接受则无缝重绑，拒绝（或玩家提前关屏）则按槽位撤销全部本地改动。
 
 ### 一致性提示
 
@@ -44,7 +44,7 @@
   - `AbstractContainerScreenMixin` — 驱动预测打开的确认/回滚计时；玩家提前关屏时清理待确认状态
   - `GuiMixin` / `ScreenMixin` — 推进对账超时，并在 HUD / 容器界面顶部绘制一致性提示
   - `AbstractCraftingMenuAccessor` / `EnchantmentMenuAccessor` / `ClientRecipeBookAccessor`
-- Access Widener：`AbstractContainerMenu.containerId` 去 final（预测菜单重绑服务端 id 用）
+- Access Widener：`AbstractContainerMenu.containerId` 去 final（预测菜单重绑服务端 id 用）；`Screen.title` 公开可写（重绑时写入服务端标题用）
 - 预测实现：`RecipeMatcher`（网格↔配方匹配、产物解析）、`CraftingResultPredictor`、`PlaceRecipePredictor`、`EnchantPredictor`、`PredictedOpen`（预测打开）
 - 对账实现：`PredictionReconciler`（登记预测、收集回包、定性并防误报）、`ReconcileToast`（淡出提示绘制）；文案在 `assets/menupredict/lang`（`en_us` / `zh_cn`）
 
@@ -54,12 +54,13 @@
 ./gradlew build
 ```
 
-产物：`build/libs/menupredict-1.2.0.jar`。依赖仅 Fabric Loader（不依赖 Fabric API）；Gradle 9.5.1 + Loom 1.13.3 + 官方 mojang 映射，Java 21。
+产物：`build/libs/menupredict-1.2.1.jar`。依赖仅 Fabric Loader（不依赖 Fabric API）；Gradle 9.5.1 + Loom 1.13.3 + 官方 mojang 映射，Java 21。
 
 ## 已知边界（如实说明）
 
 - **配方可见范围**：1.21.2+ 协议只向客户端同步「已解锁进配方书」的配方条目（`ClientRecipeBook.known`），未解锁或特殊配方（`craftingRequirements` 为空）不在本地匹配范围内——这些场景自动回退原版「等服务端」行为；服务端产物 SetSlot 到达后照常显示。
-- **预测打开的窗口期**：服务端确认（OpenScreen 回包）前，用户在预测界面里的交互都带占位 id -1，服务端整包忽略；确认时界面无缝重绑，但重绑前的本地操作会被服务端初始 SetContent 覆盖（服务端从未执行过这些操作），用户需重做一次——严格优于"盯着空白界面干等"。服务端明确拒绝（无回包）时 5 秒（100 tick）超时回滚并退回物品。
+- **多配方重叠**：数据包可能定义多个配方匹配同一网格。服务端按自己的配方表顺序取首个（客户端无法得知该顺序），因此仅当所有候选配方的产物完全一致时才预测，否则交由服务端决定。
+- **预测打开的窗口期**：服务端确认（OpenScreen 回包）前，用户在预测界面里的交互都带占位 id -1，服务端整包忽略；确认时界面无缝重绑，但重绑前的本地操作会被服务端初始 SetContent 覆盖（服务端从未执行过这些操作），用户需重做一次——严格优于"盯着空白界面干等"。服务端明确拒绝（无回包）时 5 秒（100 tick）超时回滚、玩家提前关屏时同样处理：本地改动按槽位撤销，物品回到原位。窗口期内界面标题先用原版默认文案，重绑时替换为服务端标题（自定义名的附魔台在确认后即显示正确名称）。
 - **附魔种子**：种子是服务端随机数、纯服务端持有，预测打开的界面在收到首条种子 SetData 前不显示三个选项（原版在正常打开时随初始 DataSlot 一并同步，不受影响）。
 - **结果歧义**：产物显示解析出多个候选堆叠（`resolveForStacks` 多结果）时不预测，交由服务端。
 - **背包放不下的清格**：清格余料若连背包都装不下（服务端会直接掉地上），客户端不预测该场景，避免本地生成幽灵掉落物，由服务端回包修正。
@@ -74,6 +75,7 @@
 
 ## 版本
 
+- **1.2.1** — 修复：shapeless 配方匹配补上网格物品数量校验（此前网格里多放物品会预测出幽灵产物并闪现不一致提示）；同一网格匹配到多个已知配方时增加歧义门控（仅当候选配方产物一致才预测）；预测打开的回滚从"网格物品退回背包"改为按槽位撤销全部本地改动（覆盖预测窗口内拿走产物、手动关屏等场景，物品回到原位）；重绑时应用服务端界面标题（自定义名附魔台）。
 - **1.2.0** — 新增：预测结果一致性提示（服务端回包与本地预测一致/不一致时在界面顶部短暂提示，含防误报的定性策略与中英文案）。
 - **1.1.0** — 新增：预测打开工作台/附魔台界面（右键当帧开屏、重绑服务端容器 id、拒绝超时回滚）；附魔选项预测加种子同步门控。
 - **1.0.0** — 首版：合成产物槽、配方书填格、附魔选项与结果预测。
