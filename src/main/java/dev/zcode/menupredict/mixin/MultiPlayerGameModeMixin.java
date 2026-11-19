@@ -1,6 +1,7 @@
 package dev.zcode.menupredict.mixin;
 
 import dev.zcode.menupredict.MenuPredictClient;
+import dev.zcode.menupredict.predict.CraftingResultPredictor;
 import dev.zcode.menupredict.predict.PlaceRecipePredictor;
 import dev.zcode.menupredict.predict.PredictedOpen;
 import dev.zcode.menupredict.reconcile.PredictionReconciler;
@@ -82,6 +83,7 @@ public class MultiPlayerGameModeMixin {
 		menupredict$clickMenu = localPlayer.containerMenu;
 		menupredict$clickSnapshot = PredictionReconciler.snapshot(menupredict$clickMenu);
 		menupredict$olderCheckIds = PredictionReconciler.currentCheckIds();
+		CraftingResultPredictor.beginLocalClick();
 	}
 
 	@Inject(method = "handleInventoryMouseClick", at = @At("RETURN"))
@@ -101,5 +103,6 @@ public class MultiPlayerGameModeMixin {
 		// the original values so a rollback (or an early close) can undo exactly what was touched.
 		PredictedOpen.recordClickUndo(menu, snapshot);
 		PredictionReconciler.onLocalClick(olderCheckIds, snapshot, menu);
+		CraftingResultPredictor.endLocalClick(menu, snapshot);
 	}
 }

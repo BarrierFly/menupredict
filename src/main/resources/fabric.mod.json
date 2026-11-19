@@ -1,7 +1,7 @@
 {
 	"schemaVersion": 1,
 	"id": "menupredict",
-	"version": "1.2.1",
+	"version": "1.2.2",
 	"name": "MenuPredict",
 	"description": "Client-side prediction for functional-block menus: the screen opens instantly on right-click, the crafting result, recipe book placement and the enchanting options/result are computed locally without waiting for the server round trip. Verified against server replies like vanilla does, with a short toast telling whether the prediction matched.",
 	"authors": [

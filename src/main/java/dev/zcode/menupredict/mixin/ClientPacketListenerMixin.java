@@ -1,6 +1,7 @@
 package dev.zcode.menupredict.mixin;
 
 import dev.zcode.menupredict.MenuPredictClient;
+import dev.zcode.menupredict.predict.CraftingResultPredictor;
 import dev.zcode.menupredict.predict.EnchantPredictor;
 import dev.zcode.menupredict.predict.PlaceRecipePredictor;
 import dev.zcode.menupredict.predict.PredictedOpen;
@@ -14,6 +15,7 @@ import net.minecraft.network.protocol.game.ClientboundContainerSetSlotPacket;
 import net.minecraft.network.protocol.game.ClientboundOpenScreenPacket;
 import net.minecraft.network.protocol.game.ClientboundPlaceGhostRecipePacket;
 import net.minecraft.world.inventory.AbstractContainerMenu;
+import net.minecraft.world.inventory.AbstractCraftingMenu;
 import net.minecraft.world.inventory.EnchantmentMenu;
 import net.minecraft.world.inventory.InventoryMenu;
 import org.spongepowered.asm.mixin.Mixin;
@@ -108,6 +110,13 @@ public class ClientPacketListenerMixin {
 			AbstractContainerMenu menu = menupredict$resolveMenu(packet.getContainerId());
 			if (menu != null) {
 				PredictionReconciler.onSlot(menu, packet.getSlot(), packet.getItem());
+				// The result slot is the one slot whose server replies do not self-correct through
+				// slotsChanged (the result container fires no callback): a reply computed for an
+				// intermediate grid state would regress the display once the client has moved on.
+				// The reconciler saw the packet above; the current grid's fresh answer wins.
+				if (packet.getSlot() == CraftingResultPredictor.RESULT_SLOT && menu instanceof AbstractCraftingMenu craftingMenu) {
+					CraftingResultPredictor.reassertAfterResultReply(craftingMenu, Minecraft.getInstance());
+				}
 			}
 		} finally {
 			PredictionReconciler.endServerUpdate();
