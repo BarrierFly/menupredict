@@ -6,21 +6,39 @@ import dev.zcode.menupredict.reconcile.ReconcileToast;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
+import net.minecraft.client.gui.screens.inventory.AnvilScreen;
+import net.minecraft.client.gui.screens.inventory.CartographyTableScreen;
 import net.minecraft.client.gui.screens.inventory.CraftingScreen;
 import net.minecraft.client.gui.screens.inventory.EnchantmentScreen;
+import net.minecraft.client.gui.screens.inventory.GrindstoneScreen;
+import net.minecraft.client.gui.screens.inventory.LoomScreen;
+import net.minecraft.client.gui.screens.inventory.SmithingScreen;
+import net.minecraft.client.gui.screens.inventory.StonecutterScreen;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.inventory.AbstractContainerMenu;
+import net.minecraft.world.inventory.AnvilMenu;
+import net.minecraft.world.inventory.CartographyTableMenu;
 import net.minecraft.world.inventory.CraftingMenu;
 import net.minecraft.world.inventory.EnchantmentMenu;
+import net.minecraft.world.inventory.GrindstoneMenu;
+import net.minecraft.world.inventory.LoomMenu;
 import net.minecraft.world.inventory.MenuType;
 import net.minecraft.world.inventory.Slot;
+import net.minecraft.world.inventory.SmithingMenu;
+import net.minecraft.world.inventory.StonecutterMenu;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.AnvilBlock;
+import net.minecraft.world.level.block.CartographyTableBlock;
 import net.minecraft.world.level.block.CraftingTableBlock;
 import net.minecraft.world.level.block.EnchantingTableBlock;
+import net.minecraft.world.level.block.GrindstoneBlock;
+import net.minecraft.world.level.block.LoomBlock;
+import net.minecraft.world.level.block.SmithingTableBlock;
+import net.minecraft.world.level.block.StonecutterBlock;
 import net.minecraft.world.level.block.state.BlockState;
 
 import java.util.HashMap;
@@ -29,8 +47,11 @@ import java.util.Map;
 /**
  * Predicts the menu open itself. Vanilla only shows a functional-block screen once the server's
  * {@code ClientboundOpenScreenPacket} arrives (one round trip); under latency the click seems to
- * do nothing. The menu structure, title, and initial contents (player inventory + empty grid) of
- * a crafting/enchanting table are client-known, so the screen is opened locally right away:
+ * do nothing. For every functional block whose menu structure and initial contents (player
+ * inventory + empty block slots) are client-known — crafting table, enchanting table, smithing
+ * table, anvil, stonecutter, grindstone, loom and cartography table — the screen is opened
+ * locally right away, using the same two-arg menu constructor vanilla's own
+ * {@code MenuScreens.create} uses on the client:
  *
  * <ul>
  * <li>the interaction packet is still sent and the server still decides whether to open;</li>
@@ -69,7 +90,34 @@ public final class PredictedOpen {
 
 		AbstractContainerMenu menu;
 		AbstractContainerScreen<?> screen;
-		if (state.getBlock() instanceof CraftingTableBlock) {
+		// SmithingTableBlock extends CraftingTableBlock, so it must be tested first or a smithing
+		// table would open a predicted crafting screen that the server's SMITHING menu then
+		// contradicts.
+		if (state.getBlock() instanceof SmithingTableBlock) {
+			SmithingMenu smithingMenu = new SmithingMenu(PREDICTED_CONTAINER_ID, player.getInventory());
+			menu = smithingMenu;
+			screen = new SmithingScreen(smithingMenu, player.getInventory(), Component.translatable("container.upgrade"));
+		} else if (state.getBlock() instanceof AnvilBlock) {
+			AnvilMenu anvilMenu = new AnvilMenu(PREDICTED_CONTAINER_ID, player.getInventory());
+			menu = anvilMenu;
+			screen = new AnvilScreen(anvilMenu, player.getInventory(), Component.translatable("container.repair"));
+		} else if (state.getBlock() instanceof StonecutterBlock) {
+			StonecutterMenu stonecutterMenu = new StonecutterMenu(PREDICTED_CONTAINER_ID, player.getInventory());
+			menu = stonecutterMenu;
+			screen = new StonecutterScreen(stonecutterMenu, player.getInventory(), Component.translatable("container.stonecutter"));
+		} else if (state.getBlock() instanceof GrindstoneBlock) {
+			GrindstoneMenu grindstoneMenu = new GrindstoneMenu(PREDICTED_CONTAINER_ID, player.getInventory());
+			menu = grindstoneMenu;
+			screen = new GrindstoneScreen(grindstoneMenu, player.getInventory(), Component.translatable("container.grindstone_title"));
+		} else if (state.getBlock() instanceof LoomBlock) {
+			LoomMenu loomMenu = new LoomMenu(PREDICTED_CONTAINER_ID, player.getInventory());
+			menu = loomMenu;
+			screen = new LoomScreen(loomMenu, player.getInventory(), Component.translatable("container.loom"));
+		} else if (state.getBlock() instanceof CartographyTableBlock) {
+			CartographyTableMenu cartographyMenu = new CartographyTableMenu(PREDICTED_CONTAINER_ID, player.getInventory());
+			menu = cartographyMenu;
+			screen = new CartographyTableScreen(cartographyMenu, player.getInventory(), Component.translatable("container.cartography_table"));
+		} else if (state.getBlock() instanceof CraftingTableBlock) {
 			CraftingMenu craftingMenu = new CraftingMenu(PREDICTED_CONTAINER_ID, player.getInventory());
 			menu = craftingMenu;
 			screen = new CraftingScreen(craftingMenu, player.getInventory(), Component.translatable("container.crafting"));

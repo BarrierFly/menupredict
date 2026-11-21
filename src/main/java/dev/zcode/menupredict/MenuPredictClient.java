@@ -37,7 +37,9 @@ public class MenuPredictClient implements ClientModInitializer {
 
 	@Override
 	public void onInitializeClient() {
-		LOGGER.info("MenuPredict client-side prediction enabled (crafting result, recipe placement, enchanting)");
+		LOGGER.info(
+			"MenuPredict client-side prediction enabled (crafting result, recipe placement, enchanting, instant menu open for functional blocks)"
+		);
 	}
 
 	public static void onBlockUse(BlockPos pos) {

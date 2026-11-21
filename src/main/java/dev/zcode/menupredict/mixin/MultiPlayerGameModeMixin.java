@@ -45,8 +45,8 @@ public class MultiPlayerGameModeMixin {
 	/**
 	 * After the interaction resolves: records the last right-clicked block position (an
 	 * enchanting menu is created client-side with a NULL level access, so the table position is
-	 * otherwise unknown), and — when the used block is a crafting/enchanting table — opens the
-	 * menu locally instead of waiting for the server's ClientboundOpenScreenPacket.
+	 * otherwise unknown), and — when the used block is one of the supported functional blocks —
+	 * opens the menu locally instead of waiting for the server's ClientboundOpenScreenPacket.
 	 */
 	@Inject(method = "useItemOn", at = @At("TAIL"))
 	private void menupredict$onUseItemOn(
